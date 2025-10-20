@@ -2,7 +2,7 @@
 
 ## Overview
 
-This project showcases an example of an Ansible playbook (barring sensitive credentials) that can reboot specified devices by interacting through an MDM service via APIs.
+This project showcases an example structure of an Ansible playbook (barring sensitive credentials) that can reboot specified devices by interacting through an MDM and IRM (Infrastructure Resource Modeling) service via APIs.
 
 ## Tags
 *timezones*
