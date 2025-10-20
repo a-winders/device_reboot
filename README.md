@@ -1,5 +1,4 @@
 # device_reboot
-# elo-reboot
 
 ## Overview
 
