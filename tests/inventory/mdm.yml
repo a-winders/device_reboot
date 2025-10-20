@@ -1,0 +1,11 @@
+plugin: mdm.inventory
+api_endpoint: mdm_url
+validate_certs: false
+token: mdm_token
+config_context: true
+group_by:
+  - sites
+query_filters:
+  - role: edge-server
+device_query_filters:
+  - has_primary_ip: "true"
