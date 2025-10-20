@@ -1,0 +1,10 @@
+---
+mdm_url: https://www.google.com
+mdm_api_token: vaulted_password_here
+mdm_kiosk_url: https://www.google.com/kiosks
+mdm_pos_url: https://www.google.com/pos
+mdm_kds_url: https://www.google.com/kds
+mdm_auth_url: https://www.mdm.com/auth
+mdm_clientSecret: vaulted_password_here
+mdm_reboot_url: https://www.mdm.com/reboot
+store_list: []

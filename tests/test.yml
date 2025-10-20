@@ -1,0 +1,5 @@
+---
+- name: Test device_reboot role
+  hosts: localhost
+  roles:
+    - role: device_reboot
