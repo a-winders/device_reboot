@@ -1,1 +1,280 @@
 ---
+- name: Send auth request to mdm to get all sites
+  tags: est
+  ansible.builtin.uri:
+    url: "{{ mdm_url }}"
+    method: GET
+    validate_certs: false
+    return_content: true
+    headers:
+      Accept-Version: "1.0.0"
+      Authorization: "{{ mdm_token }}"
+  register: mdm_response
+
+- name: Filter items with time zone 'US/Eastern' or 'America/Kentucky/Louisville'' and add them to the EST list
+  ansible.builtin.set_fact:
+    EST: "{{ (mdm_response.json.results | selectattr('time_zone', 'equalto', 'US/Eastern') | list) + (mdm_response.json.results | selectattr('time_zone', 'equalto', 'America/Kentucky/Louisville') | list) }}" # noqa: yaml[line-length]
+
+- name: Loop through EST list and print each item's name (AKA site name) and time zone
+  ansible.builtin.debug:
+    msg: "Site: {{ item.name }}, Time Zone: {{ item.time_zone }}"
+  loop: "{{ EST }}"
+
+- name: Collect all unique time zones
+  ansible.builtin.set_fact:
+    all_time_zones: "{{ mdm_response.json.results | map(attribute='time_zone') | unique | list }}"
+
+- name: Define known time zones
+  ansible.builtin.set_fact:
+    known_time_zones: ['US/Pacific', 'US/Mountain', 'US/Central', 'US/Eastern', 'America/Kentucky/Louisville', 'America/Chicago', 'US/Alaska', 'US/Hawaii']
+
+- name: Find unknown time zones
+  ansible.builtin.set_fact:
+    unknown_time_zones: "{{ all_time_zones | difference(known_time_zones) }}"
+
+# KIOSK
+- name: Initialize list to hold kiosk URLs
+  ansible.builtin.set_fact:
+    kiosk_url_list: []
+
+- name: Append EST stores to mdm URL
+  loop: "{{ EST }}"
+  ansible.builtin.set_fact:
+    kiosk_url_list: "{{ kiosk_url_list + [mdm_kiosk_url + item.name] }}"
+
+- name: Send mdm request to get each site's kiosk info
+  loop: "{{ kiosk_url_list }}"
+  ansible.builtin.uri:
+    url: "{{ item }}"
+    method: GET
+    status_code:
+      - 200
+    validate_certs: false
+    return_content: true
+    headers:
+      Accept: application/json
+      Authorization: "{{ mdm_token }}"
+  register: mdm_kiosk_response
+
+- name: Initialize list to hold all kiosk asset tags
+  ansible.builtin.set_fact:
+    kiosk_asset_tags: []
+
+- name: Pull asset tags from all results
+  ansible.builtin.set_fact:
+    kiosk_asset_tags: "{{ kiosk_asset_tags + item.json.results | map(attribute='asset_tag') | list }}"
+  loop: "{{ mdm_kiosk_response.results }}"
+  when: item.json.results is defined
+
+# POS
+- name: Initialize list to hold POS URLs
+  ansible.builtin.set_fact:
+    pos_url_list: []
+
+- name: Append EST store IDs to mdm URL for POS devices
+  loop: "{{ EST }}"
+  ansible.builtin.set_fact:
+    pos_url_list: "{{ pos_url_list + [mdm_pos_url + item.name] }}"
+
+- name: Send mdm request to get each site's POS info
+  loop: "{{ pos_url_list }}"
+  ansible.builtin.uri:
+    url: "{{ item }}"
+    method: GET
+    status_code:
+      - 200
+    validate_certs: false
+    return_content: true
+    headers:
+      Accept: application/json
+      Authorization: "{{ mdm_token }}"
+  register: mdm_pos_response
+
+- name: Initialize list
+  ansible.builtin.set_fact:
+    pos_device_ids: []
+
+- name: Pull device ID of each POS from all results
+  loop: "{{ mdm_pos_response.results }}"
+  ansible.builtin.set_fact:
+    pos_device_ids: "{{ pos_device_ids + item.json.results | map(attribute='custom_fields.device_id') | list }}"
+
+# KDS
+- name: Initialize list to hold KDS URLs
+  ansible.builtin.set_fact:
+    kds_url_list: []
+
+- name: Append EST store IDs to mdm URL for KDS devices
+  loop: "{{ EST }}"
+  ansible.builtin.set_fact:
+    kds_url_list: "{{ kds_url_list + [mdm_kds_url + item.name] }}"
+
+- name: Send mdm request to get each site's KDS info
+  loop: "{{ kds_url_list }}"
+  ansible.builtin.uri:
+    url: "{{ item }}"
+    method: GET
+    status_code:
+      - 200
+    validate_certs: false
+    return_content: true
+    headers:
+      Accept: application/json
+      Authorization: "{{ mdm_token }}"
+  register: mdm_kds_response
+
+- name: Initialize list to hold all KDS device IDs
+  ansible.builtin.set_fact:
+    kds_device_ids: []
+
+- name: Pull device ID of each KDS from all results
+  loop: "{{ mdm_kds_response.results }}"
+  ansible.builtin.set_fact:
+    kds_device_ids: "{{ kds_device_ids + item.json.results | map(attribute='custom_fields.device_id') | list }}"
+
+# ORB
+- name: Initialize list to hold ORB URLs
+  ansible.builtin.set_fact:
+    orb_url_list: []
+
+- name: Append EST store IDs to mdm URL for ORB devices
+  loop: "{{ EST }}"
+  ansible.builtin.set_fact:
+    orb_url_list: "{{ orb_url_list + [mdm_orb_url + item.name] }}"
+
+- name: Send mdm request to get each site's ORB info
+  loop: "{{ orb_url_list }}"
+  ansible.builtin.uri:
+    url: "{{ item }}"
+    method: GET
+    status_code:
+      - 200
+    validate_certs: false
+    return_content: true
+    headers:
+      Accept: application/json
+      Authorization: "{{ mdm_token }}"
+  register: mdm_orb_response
+
+- name: Initialize list to hold all orb device IDs
+  ansible.builtin.set_fact:
+    orb_device_ids: []
+
+- name: Pull device ID of each orb from all results
+  loop: "{{ mdm_orb_response.results }}"
+  ansible.builtin.set_fact:
+    orb_device_ids: "{{ orb_device_ids + item.json.results | map(attribute='custom_fields.device_id') | list }}"
+
+- name: Print orb_device_ids
+  ansible.builtin.debug:
+    var: orb_device_ids
+
+- name: Print kds_device_ids
+  ansible.builtin.debug:
+    var: kds_device_ids
+
+- name: Print all POS device IDs
+  ansible.builtin.debug:
+    var: pos_device_ids
+
+- name: Print all asset tags
+  ansible.builtin.debug:
+    var: kiosk_asset_tags
+
+- name: Send auth request to mdm and return token
+  ansible.builtin.uri:
+    url: "{{ mdm_auth_url }}"
+    method: POST
+    validate_certs: false
+    return_content: true
+    headers:
+      Accept-Version: "1.0.0"
+    body:
+      clientSecret: "{{ mdm_clientSecret }}"
+    body_format: json
+  register: auth_response
+
+- name: Auth token
+  ansible.builtin.debug:
+    var: auth_response.json
+
+- name: Reboot all POS
+  loop: "{{ pos_device_ids }}"
+  ansible.builtin.uri:
+    url: "{{ mdm_reboot_url }}"
+    method: POST
+    validate_certs: false
+    return_content: true
+    headers:
+      authPayload: "{{ auth_response.json.data.authPayload }}"
+      Accept-Version: "1.0.0"
+    body:
+      deviceId: "{{ item }}"
+    body_format: json
+  register: reboot_response
+
+- name: Print status code and response message for each item
+  ansible.builtin.debug:
+    msg: "Device ID: {{ item.item }} - Status Code: {{ item.status }} - Response Message: {{ item.json.message }}"
+  loop: "{{ reboot_response.results }}"
+
+- name: Reboot all KDS
+  loop: "{{ kds_device_ids }}"
+  ansible.builtin.uri:
+    url: "{{ mdm_reboot_url }}"
+    method: POST
+    validate_certs: false
+    return_content: true
+    headers:
+      authPayload: "{{ auth_response.json.data.authPayload }}"
+      Accept-Version: "1.0.0"
+    body:
+      deviceId: "{{ item }}"
+    body_format: json
+  register: reboot_response
+
+- name: Print status code and response message for each item
+  ansible.builtin.debug:
+    msg: "Device ID: {{ item.item }} - Status Code: {{ item.status }} - Response Message: {{ item.json.message }}"
+  loop: "{{ reboot_response.results }}"
+
+- name: Reboot all ORB
+  loop: "{{ orb_device_ids }}"
+  ansible.builtin.uri:
+    url: "{{ mdm_reboot_url }}"
+    method: POST
+    validate_certs: false
+    return_content: true
+    headers:
+      authPayload: "{{ auth_response.json.data.authPayload }}"
+      Accept-Version: "1.0.0"
+    body:
+      deviceId: "{{ item }}"
+    body_format: json
+  register: reboot_response
+  when: orb_device_ids | length > 0 # ensures the playbook doesn't break if there were no ORB found in mdm for this timezone
+
+- name: Print status code and response message for each item
+  ansible.builtin.debug:
+    msg: "Device ID: {{ item.item }} - Status Code: {{ item.status }} - Response Message: {{ item.json.message }}"
+  loop: "{{ reboot_response.results }}"
+
+- name: Reboot all kiosks
+  loop: "{{ kiosk_asset_tags }}"
+  ansible.builtin.uri:
+    url: "{{ mdm_reboot_url }}"
+    method: POST
+    validate_certs: false
+    return_content: true
+    headers:
+      authPayload: "{{ auth_response.json.data.authPayload }}"
+      Accept-Version: "1.0.0"
+    body:
+      deviceId: "{{ item }}"
+    body_format: json
+  register: reboot_response
+
+- name: Print status code and response message for each item
+  ansible.builtin.debug:
+    msg: "Device ID: {{ item.item }} - Status Code: {{ item.status }} - Response Message: {{ item.json.message }}"
+  loop: "{{ reboot_response.results }}"

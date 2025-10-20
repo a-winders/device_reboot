@@ -1,0 +1,130 @@
+---
+- name: Import Python script
+  ansible.builtin.script: files/parse_store_list.py {{ store_list }}
+  args:
+    executable: python3
+  changed_when: false
+  register: parsed_store_list
+
+- name: Convert string to list
+  ansible.builtin.set_fact:
+    store_list_converted: "{{ parsed_store_list.stdout | from_json }}"
+
+- name: Print converted list
+  ansible.builtin.debug:
+    var: store_list_converted
+
+# needed to break the playbook so it prevents devices from still being pulled if the store_list_converted contains an item with empty strings
+- name: Check if store_list_converted contains any empty strings
+  ansible.builtin.fail:
+    msg: "The store_list variable contains one or more empty strings."
+  when: store_list_converted | select('match', '^$') | list | length > 0
+
+- name: Send auth request to mdm and return token
+  ansible.builtin.uri:
+    url: "{{ mdm_auth_url }}"
+    method: POST
+    validate_certs: false
+    return_content: true
+    headers:
+      Accept-Version: "1.0.0"
+    body:
+      clientSecret: "{{ mdm_clientSecret }}"
+    body_format: json
+  register: auth_response
+
+- name: Auth token
+  ansible.builtin.debug:
+    var: auth_response.json
+
+- name: Build KDS URLs for each store in the list
+  ansible.builtin.set_fact:
+    kds_urls: "{{ kds_urls | default([]) + [mdm_kds_url + item] }}"
+  loop: "{{ store_list_converted }}"
+
+- name: Print KDS URLs
+  ansible.builtin.debug:
+    var: kds_urls
+
+- name: Send mdm request to get each site's KDS info
+  loop: "{{ kds_urls }}"
+  ansible.builtin.uri:
+    url: "{{ item }}"
+    method: GET
+    status_code:
+      - 200
+    validate_certs: false
+    return_content: true
+    headers:
+      Accept: application/json
+      Authorization: "{{ mdm_token }}"
+  register: mdm_kds_response
+
+- name: Initialize list to hold all KDS device IDs
+  ansible.builtin.set_fact:
+    kds_device_ids: []
+
+- name: Pull device ID of each KDS from all results
+  ansible.builtin.set_fact:
+    kds_device_ids: "{{ kds_device_ids + item.json.results | map(attribute='custom_fields.device_id') | list }}"
+  loop: "{{ mdm_kds_response.results }}"
+  when: item.json.results is defined
+
+- name: Print kds_device_ids
+  ansible.builtin.debug:
+    var: kds_device_ids
+
+- name: Initialize list to hold store IDs
+  ansible.builtin.set_fact:
+    kds_stores: []
+
+- name: Pull store ID from mdm_kds_response.results
+  ansible.builtin.set_fact:
+    kds_stores: "{{ kds_stores + item.json.results | map(attribute='name') | list }}"
+  loop: "{{ mdm_kds_response.results }}"
+  when: item.json.results is defined
+
+- name: Print kds_stores
+  ansible.builtin.debug:
+    var: kds_stores
+
+- name: Initialize dictionary to hold KDS mappings
+  ansible.builtin.set_fact:
+    kds_mapping: {}
+
+- name: Create mapping of device IDs to store IDs
+  ansible.builtin.set_fact:
+    kds_mapping: "{{ kds_mapping | combine(
+      dict(
+        item.json.results
+        | map(attribute='name')
+        | zip(item.json.results | map(attribute='custom_fields.device_id'))
+        | list
+        )
+      ) }}"
+  loop: "{{ mdm_kds_response.results }}"
+  when: item.json.results is defined
+
+- name: Print KDS mapping
+  ansible.builtin.debug:
+    var: kds_mapping
+
+- name: Reboot all KDS
+  loop: "{{ kds_mapping.values() | list }}"
+  ansible.builtin.uri:
+    url: "{{ mdm_reboot_url }}"
+    method: POST
+    validate_certs: false
+    return_content: true
+    headers:
+      authPayload: "{{ auth_response.json.data.authPayload }}"
+      Accept-Version: "1.0.0"
+    body:
+      deviceId: "{{ item }}"
+    body_format: json
+  register: reboot_response
+
+- name: Print status code and response message for each item
+  ansible.builtin.debug:
+    msg: "Store: {{ kds_mapping | dict2items | selectattr('value', 'eq', item.item) | map(attribute='key') | first }} - Device ID: {{ item.item }} - Status Code: {{ item.status }} - Response Message: {{ item.json.message }}"
+  loop: "{{ reboot_response.results }}"

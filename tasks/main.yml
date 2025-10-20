@@ -1,0 +1,41 @@
+---
+- name: Reboot kiosks in 'US/Alaska' timezone
+  ansible.builtin.import_tasks: alaska.yml
+  tags:
+    - alaska
+- name: Reboot kiosks in 'US/Eastern' timezone
+  ansible.builtin.import_tasks: est.yml
+  tags:
+    - est
+- name: Reboot kiosks in 'US/Central' timezone
+  ansible.builtin.import_tasks: cst.yml
+  tags:
+    - cst
+- name: Reboot kiosks in 'US/Hawaii' timezone
+  ansible.builtin.import_tasks: hawaii.yml
+  tags:
+    - hawaii
+- name: Reboot kiosks in 'US/Mountain' timezone
+  ansible.builtin.import_tasks: mst.yml
+  tags:
+    - mst
+- name: Reboot kiosks in 'US/Pacific' timezone
+  ansible.builtin.import_tasks: pst.yml
+  tags:
+    - pst
+- name: Reboot kiosks based on store list
+  ansible.builtin.import_tasks: kiosks.yml
+  tags:
+    - kiosks
+- name: Reboot POS devices based on store list
+  ansible.builtin.import_tasks: pos.yml
+  tags:
+    - pos
+- name: Reboot KDS devices based on store list
+  ansible.builtin.import_tasks: kds.yml
+  tags:
+    - kds
+- name: Reboot ORB devices based on store list
+  ansible.builtin.import_tasks: orb.yml
+  tags:
+    - orb

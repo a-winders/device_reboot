@@ -37,17 +37,17 @@
   ansible.builtin.debug:
     var: auth_response.json
 
-- name: Build POS URLs for each store in the list
+- name: Build ORB URLs for each store in the list
   ansible.builtin.set_fact:
-    pos_urls: "{{ pos_urls | default([]) + [mdm_pos_url + item] }}"
+    orb_urls: "{{ orb_urls | default([]) + [mdm_orb_url + item] }}"
   loop: "{{ store_list_converted }}"
 
-- name: Print POS URLs
+- name: Print ORB URLs
   ansible.builtin.debug:
-    var: pos_urls
+    var: orb_urls
 
-- name: Send mdm request to get each site's POS info
-  loop: "{{ pos_urls }}"
+- name: Send mdm request to get each site's orb info
+  loop: "{{ orb_urls }}"
   ansible.builtin.uri:
     url: "{{ item }}"
     method: GET
@@ -58,47 +58,43 @@
     headers:
       Accept: application/json
       Authorization: "{{ mdm_token }}"
-  register: mdm_pos_response
+  register: mdm_orb_response
 
-- name: Print mdm_pos_response
-  ansible.builtin.debug:
-    var: mdm_pos_response
-
-- name: Initialize list
+- name: Initialize list to hold all ORB device IDs
   ansible.builtin.set_fact:
-    pos_device_ids: []
+    orb_device_ids: []
 
-- name: Pull device ID of each POS from all results
+- name: Pull device ID of each ORB from all results
   ansible.builtin.set_fact:
-    pos_device_ids: "{{ pos_device_ids + item.json.results | map(attribute='custom_fields.device_id') | list }}"
-  loop: "{{ mdm_pos_response.results }}"
+    orb_device_ids: "{{ orb_device_ids + item.json.results | map(attribute='custom_fields.device_id') | list }}"
+  loop: "{{ mdm_orb_response.results }}"
   when: item.json.results is defined
 
-- name: Print all POS device IDs
+- name: Print orb_device_ids
   ansible.builtin.debug:
-    var: pos_device_ids
+    var: orb_device_ids
 
 - name: Initialize list to hold store IDs
   ansible.builtin.set_fact:
-    pos_stores: []
+    orb_stores: []
 
-- name: Pull store ID from mdm_pos_response.results
+- name: Pull store ID from mdm_kds_response.results
   ansible.builtin.set_fact:
-    pos_stores: "{{ pos_stores + item.json.results | map(attribute='custom_fields.device_id') | list }}"
-  loop: "{{ mdm_pos_response.results }}"
+    orb_stores: "{{ orb_stores + item.json.results | map(attribute='name') | list }}"
+  loop: "{{ mdm_orb_response.results }}"
   when: item.json.results is defined
 
-- name: Print pos_stores list
+- name: Print orb_stores
   ansible.builtin.debug:
-    var: pos_stores
+    var: orb_stores
 
-- name: Initialize dictionary to hold pos mappings
+- name: Initialize dictionary to hold ORB mappings
   ansible.builtin.set_fact:
-    pos_mapping: {}
+    orb_mapping: {}
 
-- name: Create mapping of asset tags to store IDs
+- name: Create mapping of device IDs to store IDs
   ansible.builtin.set_fact:
-    pos_mapping: "{{ pos_mapping | combine(
+    orb_mapping: "{{ orb_mapping | combine(
       dict(
         item.json.results
         | map(attribute='name')
@@ -106,15 +102,15 @@
         | list
         )
       ) }}"
-  loop: "{{ mdm_pos_response.results }}"
+  loop: "{{ mdm_orb_response.results }}"
   when: item.json.results is defined
 
-- name: Pring pos_mapping
+- name: Print ORB mapping
   ansible.builtin.debug:
-    var: pos_mapping
+    var: orb_mapping
 
-- name: Reboot all POS
-  loop: "{{ pos_mapping.values() | list }}"
+- name: Reboot all ORB
+  loop: "{{ orb_mapping.values() | list }}"
   ansible.builtin.uri:
     url: "{{ mdm_reboot_url }}"
     method: POST
@@ -130,5 +126,5 @@
 
 - name: Print status code and response message for each item
   ansible.builtin.debug:
-    msg: "Store: {{ pos_mapping | dict2items | selectattr('value', 'eq', item.item) | map(attribute='key') | first }} - Device ID: {{ item.item }} - Status Code: {{ item.status }} - Response Message: {{ item.json.message }}"
+    msg: "Store: {{ orb_mapping | dict2items | selectattr('value', 'eq', item.item) | map(attribute='key') | first }} - Device ID: {{ item.item }} - Status Code: {{ item.status }} - Response Message: {{ item.json.message }}"
   loop: "{{ reboot_response.results }}"
